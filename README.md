@@ -53,8 +53,9 @@ Open `http://127.0.0.1:5173`.
 ## Data notes
 
 Road geometry comes from OSRM when available. Elevation samples come from
-Open-Elevation through the local Vite proxy in small batches and are smoothed
-before grade calculation.
+Open-Elevation through same-origin Vercel functions in small batches and are
+smoothed before grade calculation. Place search and reverse geocoding use the
+same deployment-safe API layer.
 Offline fallbacks keep the interface usable for demonstration, but production
 research should record the data source and validate elevation accuracy against a
 trusted Rwanda DEM or commercial elevation provider.

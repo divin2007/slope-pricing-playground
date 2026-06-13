@@ -7,23 +7,23 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/elevation-api": {
+      "/api/elevation": {
         target: "https://api.open-elevation.com",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/elevation-api/, ""),
+        rewrite: (path) => path.replace(/^\/api\/elevation/, "/api/v1/lookup"),
       },
-      "/places-api": {
+      "/api/places": {
         target: "https://photon.komoot.io",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/places-api/, ""),
+        rewrite: (path) => path.replace(/^\/api\/places/, "/api/"),
       },
-      "/nominatim-api": {
+      "/api/reverse": {
         target: "https://nominatim.openstreetmap.org",
         changeOrigin: true,
         headers: {
           "User-Agent": "KigaliSlopePricingPlayground/1.0",
         },
-        rewrite: (path) => path.replace(/^\/nominatim-api/, ""),
+        rewrite: (path) => path.replace(/^\/api\/reverse/, "/reverse"),
       },
     },
     warmup: {

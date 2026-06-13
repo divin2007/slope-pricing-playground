@@ -294,7 +294,7 @@ function PlaceSearch({
       setLoading(true);
       try {
         const response = await fetch(
-          `/places-api/api/?q=${encodeURIComponent(query)}&lat=${KIGALI[0]}&lon=${KIGALI[1]}&bbox=29.85,-2.15,30.25,-1.75&limit=10`,
+          `/api/places?q=${encodeURIComponent(query)}&lat=${KIGALI[0]}&lon=${KIGALI[1]}&bbox=29.85,-2.15,30.25,-1.75&limit=10`,
           { signal: controller.signal },
         );
         if (!response.ok) throw new Error("Search unavailable");
@@ -519,7 +519,7 @@ export function App() {
         batches.map(async (batch) => {
           const locations = batch.map((point) => `${point.lat},${point.lng}`).join("|");
           const response = await fetch(
-            `/elevation-api/api/v1/lookup?locations=${locations}`,
+            `/api/elevation?locations=${encodeURIComponent(locations)}`,
           );
           if (!response.ok) return [];
           return (await response.json()).results || [];
@@ -654,7 +654,7 @@ export function App() {
 
         try {
           const response = await fetch(
-            `/nominatim-api/reverse?format=jsonv2&lat=${current.lat}&lon=${current.lng}&zoom=18&addressdetails=1`,
+            `/api/reverse?format=jsonv2&lat=${current.lat}&lon=${current.lng}&zoom=18&addressdetails=1`,
             { headers: { "Accept-Language": "en" } },
           );
           if (response.ok) {
