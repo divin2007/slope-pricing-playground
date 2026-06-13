@@ -36,6 +36,11 @@ import {
   YAxis,
 } from "recharts";
 import "leaflet/dist/leaflet.css";
+import {
+  loadTripsFromBrowser,
+  loadTripsFromLocalStorage,
+  saveTripsToBrowser,
+} from "./tripStorage";
 
 const KIGALI = [-1.9441, 30.0619];
 
@@ -448,13 +453,9 @@ export function App() {
   const [roadCondition, setRoadCondition] = useState("");
   const [surface, setSurface] = useState("");
   const [notes, setNotes] = useState("");
-  const [trips, setTrips] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("kigali-slope-trips") || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [trips, setTrips] = useState(loadTripsFromLocalStorage);
+  const [storageReady, setStorageReady] = useState(false);
+  const [persistenceStatus, setPersistenceStatus] = useState("Loading saved rides...");
   const [status, setStatus] = useState("Choose start A and stop B");
   const [searchStart, setSearchStart] = useState("");
   const [searchStop, setSearchStop] = useState("");
@@ -464,8 +465,37 @@ export function App() {
   const locationTimerRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem("kigali-slope-trips", JSON.stringify(trips));
-  }, [trips]);
+    let active = true;
+
+    loadTripsFromBrowser().then((savedTrips) => {
+      if (!active) return;
+      setTrips(savedTrips);
+      setStorageReady(true);
+      setPersistenceStatus("Saved in this browser");
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+
+    let active = true;
+    setPersistenceStatus("Saving...");
+    saveTripsToBrowser(trips)
+      .then(() => {
+        if (active) setPersistenceStatus("Saved in this browser");
+      })
+      .catch(() => {
+        if (active) setPersistenceStatus("Storage blocked - download Excel now");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [storageReady, trips]);
 
   useEffect(
     () => () => {
@@ -707,7 +737,12 @@ export function App() {
 
   function logTrip() {
     if (!analysis || !Number(fare) || !vehicle || !roadCondition || !surface) return;
-    const tripId = `KSP-${String(trips.length + 1).padStart(4, "0")}`;
+    const nextTripNumber =
+      trips.reduce((highest, trip) => {
+        const number = Number(String(trip.tripId).replace(/\D/g, ""));
+        return Number.isFinite(number) ? Math.max(highest, number) : highest;
+      }, 0) + 1;
+    const tripId = `KSP-${String(nextTripNumber).padStart(4, "0")}`;
     const trip = {
       tripId,
       recordedAt: new Date().toISOString(),
@@ -745,7 +780,7 @@ export function App() {
       transitions: analysis.transitions,
     };
     setTrips((current) => [trip, ...current]);
-    setStatus(`${tripId} added to dataset`);
+    setStatus(`${tripId} added to dataset and queued for browser storage`);
     setNotes("");
   }
 
@@ -1191,7 +1226,12 @@ export function App() {
           <div>
             <span className="step">04 · learning dataset</span>
             <h2>Collected Kigali hillside rides</h2>
-            <p>{trips.length} observed {trips.length === 1 ? "fare" : "fares"} stored locally in this browser.</p>
+            <p>
+              {trips.length} observed {trips.length === 1 ? "fare" : "fares"} stored locally in this browser.
+              <span className={`persistence-state ${persistenceStatus.startsWith("Storage") ? "storage-error" : ""}`}>
+                <FloppyDisk size={14} weight="bold" /> {persistenceStatus}
+              </span>
+            </p>
           </div>
           <button className="primary" disabled={!trips.length} onClick={exportWorkbook}>
             <DownloadSimple size={19} weight="bold" /> Download multi-sheet Excel
