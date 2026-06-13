@@ -17,3 +17,5 @@ When implementing from a selected generated mock, treat that image as the source
 - The initial screen contains no demo route, landmark presets, sample count, fare,
   metrics, chart values, or other pre-populated research data.
 - Both endpoints support coordinate entry and draggable map pins.
+- Terrain effort features are directional. Reversing A and B must swap ascent and
+  descent semantics and re-measure the reverse route.

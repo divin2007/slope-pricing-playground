@@ -34,6 +34,11 @@
 - Start A and stop B each accept validated latitude/longitude input. Both endpoint
   markers are draggable and a drop updates the stored coordinates and re-measures
   the route.
+- Reversing A and B swaps the endpoints and requests the legal reverse driving
+  route. Directional ascent, descent, net elevation, steep uphill share, and
+  steep downhill share are recalculated. A QA route changed from `+229 m / -103 m`
+  to `+54 m / -177 m`; the non-mirrored totals reflect different legal road
+  geometry in the reverse direction.
 - Mobile body width equals viewport width (390 px); no horizontal page overflow.
 - Browser console finished with no errors.
 

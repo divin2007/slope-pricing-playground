@@ -13,9 +13,11 @@ measured route and terrain data. It is intentionally separate from RMF.
 - Manual correction by dragging the device marker to the actual road
 - Latitude/longitude entry for both route endpoints
 - Draggable start and stop markers with automatic route re-measurement on drop
+- One-click A/B direction reversal
 - Road-route distance
 - Start and stop elevation
 - Cumulative climb and drop
+- Net elevation change, steep uphill share, and steep downhill share
 - Average uphill grade and maximum absolute grade
 - Share of route at 8% grade or steeper
 - Route sample coordinates, elevation, slope, and slope band

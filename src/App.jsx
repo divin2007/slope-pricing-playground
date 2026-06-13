@@ -13,6 +13,7 @@ import L from "leaflet";
 import * as XLSX from "xlsx";
 import {
   ArrowsClockwise,
+  ArrowsDownUp,
   ChartLineUp,
   DownloadSimple,
   FloppyDisk,
@@ -115,6 +116,10 @@ function analyzeRoute(points) {
   let climb = 0;
   let drop = 0;
   let steepDistance = 0;
+  let uphillDistance = 0;
+  let downhillDistance = 0;
+  let steepUphillDistance = 0;
+  let steepDownhillDistance = 0;
   const samples = points.map((point, index) => {
     const elevation = smoothedElevations[index];
     if (index === 0) {
@@ -141,6 +146,13 @@ function analyzeRoute(points) {
       ((elevation - smoothedElevations[comparisonIndex]) / gradeDistance) * 100;
     const slope = Math.max(-35, Math.min(35, rawSlope));
     if (Math.abs(slope) >= 8) steepDistance += segmentDistance;
+    if (slope > 0) {
+      uphillDistance += segmentDistance;
+      if (slope >= 8) steepUphillDistance += segmentDistance;
+    } else if (slope < 0) {
+      downhillDistance += segmentDistance;
+      if (slope <= -8) steepDownhillDistance += segmentDistance;
+    }
     return {
       ...point,
       elevation,
@@ -171,11 +183,19 @@ function analyzeRoute(points) {
     drop: Math.round(drop),
     startElevation: samples[0]?.elevation ?? 0,
     stopElevation: samples.at(-1)?.elevation ?? 0,
+    netElevationChange:
+      (samples.at(-1)?.elevation ?? 0) - (samples[0]?.elevation ?? 0),
     maxSlope: Math.max(...slopes, 0),
+    maxUphillSlope: Math.max(...samples.map((sample) => sample.slope), 0),
+    maxDownhillSlope: Math.min(...samples.map((sample) => sample.slope), 0),
     avgSlope:
       uphillSlopes.reduce((sum, sample) => sum + sample.slope, 0) /
         Math.max(uphillSlopes.length, 1) || 0,
     steepRatio: distance ? (steepDistance / distance) * 100 : 0,
+    uphillRatio: distance ? (uphillDistance / distance) * 100 : 0,
+    downhillRatio: distance ? (downhillDistance / distance) * 100 : 0,
+    steepUphillRatio: distance ? (steepUphillDistance / distance) * 100 : 0,
+    steepDownhillRatio: distance ? (steepDownhillDistance / distance) * 100 : 0,
   };
 }
 
@@ -558,6 +578,37 @@ export function App() {
     );
   }
 
+  function swapEndpoints() {
+    if (!start && !stop) return;
+    stopLocationWatch();
+    setLocating(null);
+    setLocationCandidate(null);
+
+    const previousStart = start;
+    const previousStop = stop;
+    const previousStartSearch = searchStart;
+    const previousStopSearch = searchStop;
+
+    setStart(previousStop);
+    setStop(previousStart);
+    setSearchStart(previousStopSearch);
+    setSearchStop(previousStartSearch);
+    setPickMode(previousStop ? "stop" : "start");
+
+    if (previousStart && previousStop) {
+      setStatus("Direction reversed. Re-measuring rider effort...");
+      buildRoute(previousStop, previousStart);
+    } else {
+      setRoute([]);
+      setAnalysis(null);
+      setStatus(
+        previousStop
+          ? "Previous stop is now start A. Choose stop B."
+          : "Previous start is now stop B. Choose start A.",
+      );
+    }
+  }
+
   function stopLocationWatch() {
     if (locationWatchRef.current !== null) {
       navigator.geolocation.clearWatch(locationWatchRef.current);
@@ -680,6 +731,13 @@ export function App() {
       averageUphillSlopePct: Number(analysis.avgSlope.toFixed(2)),
       maximumAbsoluteSlopePct: Number(analysis.maxSlope.toFixed(2)),
       steepRouteRatioPct: Number(analysis.steepRatio.toFixed(2)),
+      netElevationChangeM: analysis.netElevationChange,
+      maximumUphillSlopePct: Number(analysis.maxUphillSlope.toFixed(2)),
+      maximumDownhillSlopePct: Number(analysis.maxDownhillSlope.toFixed(2)),
+      uphillRouteRatioPct: Number(analysis.uphillRatio.toFixed(2)),
+      downhillRouteRatioPct: Number(analysis.downhillRatio.toFixed(2)),
+      steepUphillRouteRatioPct: Number(analysis.steepUphillRatio.toFixed(2)),
+      steepDownhillRouteRatioPct: Number(analysis.steepDownhillRatio.toFixed(2)),
       routeSampleCount: analysis.samples.length,
       slopeTransitionCount: analysis.transitions.length,
       notes,
@@ -718,6 +776,13 @@ export function App() {
       ["averageUphillSlopePct", "Mean positive road grade across sampled uphill segments."],
       ["maximumAbsoluteSlopePct", "Largest absolute sampled road grade."],
       ["steepRouteRatioPct", "Share of route distance with absolute grade of at least 8%."],
+      ["netElevationChangeM", "Stop elevation minus start elevation. Positive means the trip ends higher."],
+      ["maximumUphillSlopePct", "Largest positive road grade in the selected A-to-B direction."],
+      ["maximumDownhillSlopePct", "Most negative road grade in the selected A-to-B direction."],
+      ["uphillRouteRatioPct", "Share of A-to-B route distance with positive grade."],
+      ["downhillRouteRatioPct", "Share of A-to-B route distance with negative grade."],
+      ["steepUphillRouteRatioPct", "Share of route distance climbing at 8% grade or steeper."],
+      ["steepDownhillRouteRatioPct", "Share of route distance descending at -8% grade or steeper."],
       ["slopeBand", "Flat <3%, Moderate 3-8%, Steep 8-14%, Extreme >=14%."],
     ];
     const workbook = XLSX.utils.book_new();
@@ -802,6 +867,17 @@ export function App() {
                   locating={locating === "start"}
                 />
               </label>
+              <button
+                className="swap-route"
+                type="button"
+                onClick={swapEndpoints}
+                disabled={!start && !stop}
+                title="Swap start A and stop B"
+                aria-label="Swap start and stop"
+              >
+                <ArrowsDownUp size={20} weight="bold" />
+                <span>Reverse</span>
+              </button>
               <label>
                 <span className="point-label stop-label">Stop point B</span>
                 <PlaceSearch
@@ -1005,12 +1081,14 @@ export function App() {
             {analysis ? (
               <>
                 <div className="metric-grid">
-                  <Metric label="Road distance" value={`${analysis.distanceKm.toFixed(2)} km`} detail="Routed path" accent="#20d9a0" />
-                  <Metric label="Cumulative climb" value={`+${analysis.climb} m`} detail="Total uphill" accent="#ffc331" />
-                  <Metric label="Cumulative drop" value={`-${analysis.drop} m`} detail="Total downhill" accent="#43bfff" />
-                  <Metric label="Maximum slope" value={`${analysis.maxSlope.toFixed(1)}%`} detail="Absolute road grade" accent="#ff5574" />
-                  <Metric label="Average uphill" value={`${analysis.avgSlope.toFixed(1)}%`} detail="Positive segments" accent="#9f8cff" />
-                  <Metric label="Steep route share" value={`${analysis.steepRatio.toFixed(1)}%`} detail="Grade ≥8%" accent="#ff8a42" />
+                  <Metric label="Road distance" value={`${analysis.distanceKm.toFixed(2)} km`} detail="A to B routed path" accent="#20d9a0" />
+                  <Metric label="Cumulative climb" value={`+${analysis.climb} m`} detail="Uphill in A to B direction" accent="#ffc331" />
+                  <Metric label="Cumulative drop" value={`-${analysis.drop} m`} detail="Downhill in A to B direction" accent="#43bfff" />
+                  <Metric label="Net elevation" value={`${analysis.netElevationChange >= 0 ? "+" : ""}${analysis.netElevationChange} m`} detail="Stop B minus start A" accent="#9f8cff" />
+                  <Metric label="Steep uphill share" value={`${analysis.steepUphillRatio.toFixed(1)}%`} detail="Climbing grade 8% or more" accent="#ff8a42" />
+                  <Metric label="Steep downhill share" value={`${analysis.steepDownhillRatio.toFixed(1)}%`} detail="Descending grade -8% or less" accent="#ff5574" />
+                  <Metric label="Max uphill slope" value={`+${analysis.maxUphillSlope.toFixed(1)}%`} detail="Hardest climb A to B" accent="#ffc331" />
+                  <Metric label="Max downhill slope" value={`${analysis.maxDownhillSlope.toFixed(1)}%`} detail="Steepest descent A to B" accent="#43bfff" />
                 </div>
                 <div className="elevation-strip">
                   <span>A altitude <strong>{analysis.startElevation} m</strong></span>
